@@ -1,5 +1,5 @@
 from src.date import dateFormatted
-
+from src.telegram_functions import telegram_bot_sendtext
 import sys
 import yaml
 
@@ -22,7 +22,8 @@ COLOR = {
     'red': '\033[91m'
 }
 
-def logger(message, progress_indicator = False, color = 'default'):
+def logger(message, progress_indicator = False, color = 'default', sendTelegram = False):
+    if sendTelegram: telegram_bot_sendtext(message)
     global last_log_is_progress
     color_formatted = COLOR.get(color.lower(), COLOR['default'])
 

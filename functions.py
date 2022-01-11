@@ -516,7 +516,7 @@ def refreshHeroes():
     if hero_clicked > 0:
         logger('💪 %d heroes sent to work (%d in total)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
     else:
-        logger('💪 %d heroes were working' % hero_working, sendTelegram=True)
+        logger('💪 %d heroes are working' % hero_working, sendTelegram=True)
     goToGame()
 
 def tryClickNewMap():

@@ -30,6 +30,9 @@ def initConfig():
     global hero_clicks
     hero_clicks = 0
 
+    global hero_working
+    hero_working = 0
+
     global login_attempts
     login_attempts = 0
 
@@ -242,6 +245,8 @@ def clickGreenBarButtons():
     logger('🟩 %d green bars detected' % len(green_bars))
     buttons = positions(images['go-work'], threshold=configThreshold['go_to_work_btn'])
     logger('🆗 %d buttons detected' % len(buttons))
+    global hero_working
+    hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
 
 
     not_working_green_bars = []
@@ -441,7 +446,10 @@ def refreshHeroes():
 
         scroll()
         time.sleep(2)
-    logger('💪 %d heroes sent to work' % hero_clicks, sendTelegram=True)
+    if hero_clicks > 0:
+        logger('💪 %d heroes sent to work (%d in total)' % hero_clicks % (hero_working + hero_clicks), sendTelegram=True)
+    else:
+        logger('💪 %d heroes were working' % hero_working, sendTelegram=True)
     goToGame()
 
 def tryClickNewMap():

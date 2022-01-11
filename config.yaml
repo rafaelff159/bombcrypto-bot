@@ -64,7 +64,7 @@
     #
     # [pt_BR]
     # Valor padrão: 0.8
-    commom: 0.8
+    divider: 0.8
 
     # [en_US]
     # Default value: 0.8
@@ -146,3 +146,26 @@
   # Valor padrão : False
   # Opções disponíveis: False ou True
   save_log_to_file: True
+
+
+  # [en_US] Option to send log to telegram chat, you need to set the level, token_api, and chat_id , if u need some help to create bot check out on this WebSite below
+  # https://ichi.pro/pt/como-criar-um-bot-do-telegram-e-enviar-mensagens-com-python-84606910593598
+  # Default value: disable
+  # Available options:
+  #   disable   = disable telegram function
+  #   onlylogin = send just the info about loggin/wallet
+  #   all       = send all
+  # 
+  # [pt_BR] Opção de enviar log para telegrama de chat, você precisa definir o level, token_api e chat_id, se precisar de ajuda para criar o bot confira neste site abaixo
+  # https://ichi.pro/pt/como-criar-um-bot-do-telegram-e-enviar-mensagens-com-python-84606910593598
+  # Valor padrão : disable
+  # Opções disponíveis:
+  #   disable   = desabilitar função de telegram
+  #   enabled       = envia tudo
+  # 
+  telegram:
+    level: 'disable'
+    token_api: 'your_api_token'
+    chat_id: 'your_chat_id'
+    send_screenshot_interval: 60
+    send_stashscreen_interval: 120

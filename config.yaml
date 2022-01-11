@@ -107,7 +107,7 @@
   #
   # [pt_BR]
   # Valor padrão: 3
-  scroll_attemps: 1
+  scroll_attemps: 2
 
   # [en_US]
   # Default value: true
@@ -121,7 +121,7 @@
   #
   # [pt_BR]
   # Valor padrão: 200
-  click_and_drag_amount: 270
+  click_and_drag_amount: 285
 
   # [en_US]
   # Default value: green

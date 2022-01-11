@@ -255,9 +255,6 @@ def positions(target, threshold=configThreshold['default'],img = None):
     return rectangles
 
 def scroll():
-    global hero_working
-    hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
-
     dividers = positions(images['divider'], threshold = configThreshold['divider'])
     if (len(dividers) == 0):
         return
@@ -498,6 +495,7 @@ def refreshHeroes():
     empty_scrolls_attempts = config['scroll_attemps']
 
     while(empty_scrolls_attempts >0):
+        hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
         if config['select_heroes_mode'] == 'full':
             buttonsClicked = clickFullBarButtons()
         elif config['select_heroes_mode'] == 'green':
@@ -511,7 +509,9 @@ def refreshHeroes():
 
         empty_scrolls_attempts -= 1
 
-        scroll()
+        if empty_scrolls_attempts > 0:
+            scroll()
+        
         time.sleep(2)
     if hero_clicked > 0:
         logger('💪 %d heroes sent to work (%d in total)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
@@ -597,6 +597,7 @@ def printstashTelegram(update: Update, context: CallbackContext) -> int:
 
 def workallTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        update.message.reply_text('Sending heroes to work...')
         goToHeroes()
         clickWorkAll()
         goToGame()
@@ -605,6 +606,7 @@ def workallTelegram(update: Update, context: CallbackContext) -> int:
 
 def restallTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        update.message.reply_text('Sending heroes to rest...')
         goToHeroes()
         clickRestAll()
         goToGame()

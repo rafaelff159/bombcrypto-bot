@@ -164,8 +164,8 @@
   #   enabled       = envia tudo
   # 
   telegram:
-    level: 'disable'
-    token_api: 'your_api_token'
+    enabled: true
+    token_api: '5034857916:AAED3DZ51mxRCOu4a3WHWMJMVPt5eE3DDuE'
     chat_id: 'your_chat_id'
     send_screenshot_interval: 60
     send_stashscreen_interval: 120

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-    
+import threading
 from src.logger import logger, loggerMapClicked
-from cv2 import cv2
+from cv2 import cv2, threshold
 from os import listdir
 from random import randint
 from random import random
@@ -13,6 +14,15 @@ import yaml
 from src.telegram_functions import telegram_bot_sendimage
 import datetime
 import os
+from telegram import Update
+from telegram.ext import (
+    Updater,
+    CommandHandler,
+    MessageHandler,
+    Filters,
+    ConversationHandler,
+    CallbackContext,
+)
 
 #Init config variables
 stream = open("config.yaml", 'r')
@@ -45,6 +55,65 @@ def initConfig():
     if configHome['enable']:
         global home_heroes
         home_heroes = loadHeroesToSendHome()
+
+def initBot():
+    last = {
+    "login" : 0,
+    "heroes" : 0,
+    "new_map" : 0,
+    "check_for_captcha" : 0,
+    "refresh_heroes" : 0,
+    "send_screenshot" : 0,
+    "send_stashscreen" : 0
+    }
+
+    t = threading.currentThread()
+    while getattr(t, "running", True):
+        now = time.time()
+
+        if now - last["login"] > addRandomness(configIntervals['check_for_login'] * 60):
+            sys.stdout.flush()
+            last["login"] = now
+            tryLogin()
+        
+        if not getattr(t, "running", True):
+            break
+        if now - last["heroes"] > addRandomness(configIntervals['send_heroes_for_work'] * 60):
+            last["heroes"] = now
+            refreshHeroes()
+
+        if not getattr(t, "running", True):
+            break
+        if now - last["new_map"] > configIntervals['check_for_new_map_button']:
+            last["new_map"] = now
+            tryClickNewMap()
+
+        if not getattr(t, "running", True):
+            break
+        if now - last["refresh_heroes"] > addRandomness(configIntervals['refresh_heroes_positions'] * 60):
+            last["refresh_heroes"] = now
+            refreshHeroesPositions()
+
+        if not getattr(t, "running", True):
+            break
+        if now - last["send_screenshot"] > addRandomness(config['telegram']['send_screenshot_interval'] * 60):
+            last["send_screenshot"] = now
+            sendScreenShotToTelegram()
+
+        if not getattr(t, "running", True):
+            break
+        if now - last["send_stashscreen"] > addRandomness(config['telegram']['send_stashscreen_interval'] * 60):
+            if sendStashScreenToTelegram():
+                last["send_stashscreen"] = now
+
+        #clickBtn(teasureHunt)
+        logger(None, progress_indicator=True)
+
+        sys.stdout.flush()
+
+        time.sleep(1)
+    
+    logger('Bombcrypto Bot Stopped', sendTelegram=True)
 
 def addRandomness(n, randomn_factor_size=None):
     """Returns n with randomness
@@ -204,6 +273,8 @@ def scroll():
 
 def clickButtons():
     buttons = positions(images['go-work'], threshold=configThreshold['go_to_work_btn'])
+    global hero_working
+    hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
     # print('buttons: {}'.format(len(buttons)))
     for (x, y, w, h) in buttons:
         moveToWithRandomness(x+(w/2),y+(h/2),1)
@@ -330,16 +401,16 @@ def tryLogin():
         pyautogui.hotkey('ctrl','f5')
         return
 
-    if clickBtn(images['connect-wallet'], timeout = 10):
+    if clickBtn(images['connect-wallet'], threshold = configThreshold['select_wallet_buttons']):
         logger('🎉 Connect wallet button detected, logging in!', sendTelegram=True)
         login_attempts = login_attempts + 1
         #TODO mto ele da erro e poco o botao n abre
-        # time.sleep(10)
+        time.sleep(10)
 
-    if clickBtn(images['select-wallet-2'], timeout=8):
+    if clickBtn(images['select-wallet-2'], threshold = configThreshold['select_wallet_buttons']):
         # sometimes the sign popup appears imediately
         login_attempts = login_attempts + 1
-        # print('sign button clicked')
+        time.sleep(20)
         # print('{} login attempt'.format(login_attempts))
         if clickBtn(images['treasure-hunt-icon'], timeout = 15):
             logger('🆗 Sucessfully login, treasure hunt btn clicked', sendTelegram=True)
@@ -358,12 +429,12 @@ def tryLogin():
         # print('sleep in case there is no metamask text removed')
         # time.sleep(20)
 
-    if clickBtn(images['select-wallet-2'], timeout = 20):
+    if clickBtn(images['select-wallet-2'], threshold = configThreshold['select_wallet_buttons']):
         login_attempts = login_attempts + 1
         # print('sign button clicked')
         # print('{} login attempt'.format(login_attempts))
-        # time.sleep(25)
-        if clickBtn(images['treasure-hunt-icon'], timeout=25):
+        time.sleep(20)
+        if clickBtn(images['treasure-hunt-icon'], threshold = configThreshold['select_wallet_buttons']):
             logger('🆗 Sucessfully login, treasure hunt btn clicked', sendTelegram=True)
             login_attempts = 0
         # time.sleep(15)
@@ -375,6 +446,7 @@ def tryLogin():
     
     if login_attempts > 0:
         logger('⚠️ Unsuccessful login attempt. Attempt: %d' % login_attempts, sendTelegram=True)
+        tryLogin()
 
 
 
@@ -428,7 +500,11 @@ def refreshHeroes():
         logger('⚒️ Sending all heroes to work', color = 'green')
 
     buttonsClicked = 0
+    global hero_clicks
     hero_clicks = 0
+    global hero_working
+    hero_working = 0
+    hero_clicked = 0
     empty_scrolls_attempts = config['scroll_attemps']
 
     while(empty_scrolls_attempts >0):
@@ -441,13 +517,15 @@ def refreshHeroes():
 
         sendHeroesHome()
 
+        hero_clicked += buttonsClicked
+
         if buttonsClicked == 0:
             empty_scrolls_attempts -= 1
 
         scroll()
         time.sleep(2)
-    if hero_clicks > 0:
-        logger('💪 %d heroes sent to work (%d in total)' % hero_clicks % (hero_working + hero_clicks), sendTelegram=True)
+    if hero_clicked > 0:
+        logger('💪 %d heroes sent to work (%d in total)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
     else:
         logger('💪 %d heroes were working' % hero_working, sendTelegram=True)
     goToGame()
@@ -479,10 +557,59 @@ def sendStashScreenToTelegram():
     return False
 
 
-#cv2.imshow('img',sct_img)
-#cv2.waitKey()
+#Telegram functions ---------------------------------------
 
-# colocar o botao em pt
-# soh resetar posiçoes se n tiver clickado em newmap em x segundos
+bot_enabled = config['telegram']['enabled']
+bot_token = config['telegram']['token_api']
+bot_chatID = config['telegram']['chat_id']
+
+botThread: threading.Thread
+STARTED = range(1)
+
+def startTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        update.message.reply_text('Initialiting Bombcrypto Bot')
+        global botThread
+        botThread = threading.Thread(target=initBot)
+        botThread.start()
+        return STARTED
+
+def stopTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        update.message.reply_text('Sending interrupting signal...')
+        botThread.running = False
+        return ConversationHandler.END
+
+def printscreenTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        sendScreenShotToTelegram()
+        return STARTED
+
+def printstashTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        sendStashScreenToTelegram()
+        return STARTED
+
+
+def initTelegram() -> None:
+    if bot_enabled:
+        updater = Updater(bot_token)
+        dispatcher = updater.dispatcher
+
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', startTelegram)],
+            states={
+                STARTED: [
+                    CommandHandler('stop', stopTelegram),
+                    CommandHandler('printscreen', printscreenTelegram),
+                    CommandHandler('printstash', printstashTelegram),
+                ]
+            },
+            fallbacks=[CommandHandler('stop', stopTelegram)],
+        )
+        dispatcher.add_handler(conv_handler)
+
+        updater.start_polling()
+        updater.idle()
 
 

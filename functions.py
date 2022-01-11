@@ -514,7 +514,7 @@ def refreshHeroes():
         
         time.sleep(2)
     if hero_clicked > 0:
-        logger('💪 %d heroes sent to work (%d in total)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
+        logger('💪 %d heroes sent to work (%d working now)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
     else:
         logger('💪 %d heroes are working' % hero_working, sendTelegram=True)
     goToGame()

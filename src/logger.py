@@ -57,9 +57,3 @@ def logger(message, progress_indicator = False, color = 'default', sendTelegram 
         logger_file.close()
 
     return True
-
-def loggerMapClicked():
-  logger('🗺️ New Map button clicked!', sendTelegram=True)
-  logger_file = open("./logs/new-map.log", "a", encoding='utf-8')
-  logger_file.write(dateFormatted() + '\n')
-  logger_file.close()

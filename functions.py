@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-    
 import threading
-from src.logger import logger, loggerMapClicked
-from cv2 import cv2, threshold
+from src.logger import logger
+from cv2 import cv2
 from os import listdir
 from random import randint
 from random import random
@@ -14,12 +14,10 @@ import yaml
 from src.telegram_functions import telegram_bot_sendimage
 import datetime
 import os
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Updater,
     CommandHandler,
-    MessageHandler,
-    Filters,
     ConversationHandler,
     CallbackContext,
 )
@@ -257,6 +255,8 @@ def positions(target, threshold=configThreshold['default'],img = None):
     return rectangles
 
 def scroll():
+    global hero_working
+    hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
 
     dividers = positions(images['divider'], threshold = configThreshold['divider'])
     if (len(dividers) == 0):
@@ -271,21 +271,13 @@ def scroll():
         pyautogui.dragRel(0,-config['click_and_drag_amount'],duration=1, button='left')
 
 
-def clickButtons():
-    buttons = positions(images['go-work'], threshold=configThreshold['go_to_work_btn'])
-    global hero_working
-    hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
-    # print('buttons: {}'.format(len(buttons)))
-    for (x, y, w, h) in buttons:
-        moveToWithRandomness(x+(w/2),y+(h/2),1)
-        pyautogui.click()
-        global hero_clicks
-        hero_clicks = hero_clicks + 1
-        #cv2.rectangle(sct_img, (x, y) , (x + w, y + h), (0,255,255),2)
-        if hero_clicks > 20:
-            logger('too many hero clicks, try to increase the go_to_work_btn threshold')
-            return
-    return len(buttons)
+def clickWorkAll():
+    clickBtn(images['work-all'])
+    return 0
+
+def clickRestAll():
+    clickBtn(images['rest-all'])
+    return 0
 
 def isHome(hero, buttons):
     y = hero[1]
@@ -316,8 +308,6 @@ def clickGreenBarButtons():
     logger('🟩 %d green bars detected' % len(green_bars))
     buttons = positions(images['go-work'], threshold=configThreshold['go_to_work_btn'])
     logger('🆗 %d buttons detected' % len(buttons))
-    global hero_working
-    hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
 
 
     not_working_green_bars = []
@@ -513,14 +503,13 @@ def refreshHeroes():
         elif config['select_heroes_mode'] == 'green':
             buttonsClicked = clickGreenBarButtons()
         else:
-            buttonsClicked = clickButtons()
+            buttonsClicked = clickWorkAll()
 
         sendHeroesHome()
 
         hero_clicked += buttonsClicked
 
-        if buttonsClicked == 0:
-            empty_scrolls_attempts -= 1
+        empty_scrolls_attempts -= 1
 
         scroll()
         time.sleep(2)
@@ -532,7 +521,9 @@ def refreshHeroes():
 
 def tryClickNewMap():
     if clickBtn(images['new-map']):
-        loggerMapClicked()
+        time.sleep(1)
+        sendStashScreenToTelegram()
+        logger('🗺️ New Map button clicked!', sendTelegram=True)
 
 def sendScreenShotToTelegram():
     q = datetime.datetime.now()
@@ -565,10 +556,11 @@ bot_chatID = config['telegram']['chat_id']
 
 botThread: threading.Thread
 STARTED = range(1)
+reply_keyboard_commands = [['/start', '/workall', '/restall'], ['/stop', '/printscreen', '/printstash']]
 
 def startTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        update.message.reply_text('Initialiting Bombcrypto Bot')
+        update.message.reply_text('Initialiting Bombcrypto Bot', reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
         global botThread
         botThread = threading.Thread(target=initBot)
         botThread.start()
@@ -582,14 +574,42 @@ def stopTelegram(update: Update, context: CallbackContext) -> int:
 
 def printscreenTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        sendScreenShotToTelegram()
+        q = datetime.datetime.now()
+        d = q.strftime("%d%m%Y%H%M")
+        image_file = os.path.join('targets', d +'.png')
+        pyautogui.screenshot(image_file)
+        update.message.reply_photo(photo=open(image_file, 'rb'), reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
+        os.remove(image_file)
         return STARTED
 
 def printstashTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        sendStashScreenToTelegram()
+        if clickBtn(images['stash']):
+            time.sleep(3)
+            q = datetime.datetime.now()
+            d = q.strftime("%d%m%Y%H%M")
+            image_file = os.path.join('targets', d +'.png')
+            pyautogui.screenshot(image_file)
+            update.message.reply_photo(photo=open(image_file, 'rb'), reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
+            os.remove(image_file)
+            clickBtn(images['x'])
         return STARTED
 
+def workallTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        goToHeroes()
+        clickWorkAll()
+        goToGame()
+        update.message.reply_text('All heroes sent to work', reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
+        return STARTED
+
+def restallTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        goToHeroes()
+        clickRestAll()
+        goToGame()
+        update.message.reply_text('All heroes sent to rest', reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
+        return STARTED
 
 def initTelegram() -> None:
     if bot_enabled:
@@ -603,6 +623,8 @@ def initTelegram() -> None:
                     CommandHandler('stop', stopTelegram),
                     CommandHandler('printscreen', printscreenTelegram),
                     CommandHandler('printstash', printstashTelegram),
+                    CommandHandler('workall', workallTelegram),
+                    CommandHandler('restall', restallTelegram)
                 ]
             },
             fallbacks=[CommandHandler('stop', stopTelegram)],

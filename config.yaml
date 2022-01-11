@@ -107,7 +107,7 @@
   #
   # [pt_BR]
   # Valor padrão: 3
-  scroll_attemps: 3
+  scroll_attemps: 1
 
   # [en_US]
   # Default value: true
@@ -121,7 +121,7 @@
   #
   # [pt_BR]
   # Valor padrão: 200
-  click_and_drag_amount: 200
+  click_and_drag_amount: 270
 
   # [en_US]
   # Default value: green
@@ -165,7 +165,7 @@
   # 
   telegram:
     enabled: true
-    token_api: '5034857916:AAED3DZ51mxRCOu4a3WHWMJMVPt5eE3DDuE'
+    token_api: 'your_token_api'
     chat_id: 'your_chat_id'
     send_screenshot_interval: 60
     send_stashscreen_interval: 120

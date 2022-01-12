@@ -34,12 +34,6 @@ configIntervals = config['time_intervals']
 
 def initConfig():
     pyautogui.PAUSE = configIntervals['interval_between_moviments']
-    
-    global hero_clicks
-    hero_clicks = 0
-
-    global hero_working
-    hero_working = 0
 
     global login_attempts
     login_attempts = 0
@@ -50,11 +44,8 @@ def initConfig():
     global images
     images = load_images()
 
-    if configHome['enable']:
-        global home_heroes
-        home_heroes = loadHeroesToSendHome()
-
 def initBot():
+
     last = {
     "login" : 0,
     "heroes" : 0,
@@ -78,7 +69,7 @@ def initBot():
             break
         if now - last["heroes"] > addRandomness(configIntervals['send_heroes_for_work'] * 60):
             last["heroes"] = now
-            refreshHeroes()
+            refreshHeroes(config['select_heroes_mode'])
 
         if not getattr(t, "running", True):
             break
@@ -92,19 +83,6 @@ def initBot():
             last["refresh_heroes"] = now
             refreshHeroesPositions()
 
-        if not getattr(t, "running", True):
-            break
-        if now - last["send_screenshot"] > addRandomness(config['telegram']['send_screenshot_interval'] * 60):
-            last["send_screenshot"] = now
-            sendScreenShotToTelegram()
-
-        if not getattr(t, "running", True):
-            break
-        if now - last["send_stashscreen"] > addRandomness(config['telegram']['send_stashscreen_interval'] * 60):
-            if sendStashScreenToTelegram():
-                last["send_stashscreen"] = now
-
-        #clickBtn(teasureHunt)
         logger(None, progress_indicator=True)
 
         sys.stdout.flush()
@@ -272,8 +250,10 @@ def clickWorkAll():
     clickBtn(images['work-all'])
     return 0
 
-def clickRestAll():
+def sendRestAll():
+    goToHeroes()
     clickBtn(images['rest-all'])
+    goToGame()
     return 0
 
 def isHome(hero, buttons):
@@ -321,11 +301,9 @@ def clickGreenBarButtons():
         # isWorking(y, buttons)
         moveToWithRandomness(x+offset+(w/2),y+(h/2),1)
         pyautogui.click()
-        global hero_clicks
-        hero_clicks = hero_clicks + 1
         hero_clicks_cnt = hero_clicks_cnt + 1
         if hero_clicks_cnt > 20:
-            logger('⚠️ Too many hero clicks, try to increase the go_to_work_btn threshold')
+            logger('⚠️ Too many hero clicks, try to increase the go_to_work_btn threshold', sendTelegram=True)
             return
         #cv2.rectangle(sct_img, (x, y) , (x + w, y + h), (0,255,255),2)
     return len(not_working_green_bars)
@@ -346,8 +324,6 @@ def clickFullBarButtons():
     for (x, y, w, h) in not_working_full_bars:
         moveToWithRandomness(x+offset+(w/2),y+(h/2),1)
         pyautogui.click()
-        global hero_clicks
-        hero_clicks = hero_clicks + 1
 
     return len(not_working_full_bars)
 
@@ -370,12 +346,10 @@ def goToGame():
     clickBtn(images['treasure-hunt-icon'])
 
 def refreshHeroesPositions():
-
     logger('🔃 Refreshing Heroes Positions')
     clickBtn(images['go-back-arrow'])
     clickBtn(images['treasure-hunt-icon'])
-
-    # time.sleep(3)
+    time.sleep(1)
     clickBtn(images['treasure-hunt-icon'])
 
 def tryLogin():
@@ -387,6 +361,10 @@ def tryLogin():
         login_attempts = 0
         pyautogui.hotkey('ctrl','f5')
         return
+
+    if clickBtn(images['ok']):
+        time.sleep(1)
+        pass
 
     if clickBtn(images['connect-wallet'], threshold = configThreshold['select_wallet_buttons']):
         logger('🎉 Connect wallet button detected, logging in!', sendTelegram=True)
@@ -426,97 +404,103 @@ def tryLogin():
             login_attempts = 0
         # time.sleep(15)
 
-    if clickBtn(images['ok'], timeout=5):
+    if clickBtn(images['ok']):
         pass
         # time.sleep(15)
         # print('ok button clicked')
     
     if login_attempts > 0:
         logger('⚠️ Unsuccessful login attempt. Attempt: %d' % login_attempts, sendTelegram=True)
-        tryLogin()
 
 
 
 def sendHeroesHome():
     if not configHome['enable']:
         return
-    heroes_positions = []
-    for hero in home_heroes:
-        hero_positions = positions(hero, threshold=configHome['hero_threshold'])
-        if not len (hero_positions) == 0:
-            #TODO maybe pick up match with most wheight instead of first
-            hero_position = hero_positions[0]
-            heroes_positions.append(hero_position)
+        
+    home_heroes = loadHeroesToSendHome()
+    goToHeroes()
+    empty_scrolls_attempts = config['scroll_attemps']
+    while(empty_scrolls_attempts >0):
+        heroes_positions = []
+        for hero in home_heroes:
+            hero_positions = positions(hero, threshold=configHome['hero_threshold'])
+            if not len (hero_positions) == 0:
+                #TODO maybe pick up match with most wheight instead of first
+                hero_position = hero_positions[0]
+                heroes_positions.append(hero_position)
 
-    n = len(heroes_positions)
-    if n == 0:
-        print('No heroes that should be sent home found.')
-        return
-    print(' %d heroes that should be sent home found' % n)
-    # if send-home button exists, the hero is not home
-    go_home_buttons = positions(images['send-home'], threshold=configHome['home_button_threshold'])
-    # TODO pass it as an argument for both this and the other function that uses it
-    go_work_buttons = positions(images['go-work'], threshold=configThreshold['go_to_work_btn'])
+        n = len(heroes_positions)
+        if n == 0:
+            print('No heroes that should be sent home found.')
+            return
+        print(' %d heroes that should be sent home found' % n)
+        # if send-home button exists, the hero is not home
+        go_home_buttons = positions(images['send-home'], threshold=configHome['home_button_threshold'])
+        # TODO pass it as an argument for both this and the other function that uses it
+        go_work_buttons = positions(images['go-work'], threshold=configThreshold['go_to_work_btn'])
 
-    for position in heroes_positions:
-        if not isHome(position,go_home_buttons):
-            print(isWorking(position, go_work_buttons))
-            if(not isWorking(position, go_work_buttons)):
-                print ('hero not working, sending him home')
-                moveToWithRandomness(go_home_buttons[0][0]+go_home_buttons[0][2]/2,position[1]+position[3]/2,1)
-                pyautogui.click()
+        for position in heroes_positions:
+            if not isHome(position,go_home_buttons):
+                print(isWorking(position, go_work_buttons))
+                if(not isWorking(position, go_work_buttons)):
+                    print ('hero not working, sending him home')
+                    moveToWithRandomness(go_home_buttons[0][0]+go_home_buttons[0][2]/2,position[1]+position[3]/2,1)
+                    pyautogui.click()
+                else:
+                    print ('hero working, not sending him home(no dark work button)')
             else:
-                print ('hero working, not sending him home(no dark work button)')
-        else:
-            print('hero already home, or home full(no dark home button)')
+                print('hero already home, or home full(no dark home button)')
+
+        empty_scrolls_attempts -= 1
+        if empty_scrolls_attempts > 0:
+            scroll()
+        time.sleep(1)
+    goToGame()
 
 
 
 
 
-def refreshHeroes():
-    logger('🏢 Search for heroes to work')
+def refreshHeroes(mode):
+    if mode == 'full':
+        logger('⚒️ Sending heroes with full stamina bar to work', sendTelegram=True)
+    elif mode == 'green':
+        logger('⚒️ Sending heroes with green stamina bar to work', sendTelegram=True)
+    else:
+        logger('⚒️ Sending all heroes to work', sendTelegram=True)
 
     goToHeroes()
 
-    if config['select_heroes_mode'] == "full":
-        logger('⚒️ Sending heroes with full stamina bar to work', color = 'green')
-    elif config['select_heroes_mode'] == "green":
-        logger('⚒️ Sending heroes with green stamina bar to work', color = 'green')
+    if mode == 'all':
+        clickWorkAll()
+        logger('💪 All heroes sent to working', sendTelegram=True)
     else:
-        logger('⚒️ Sending all heroes to work', color = 'green')
+        buttonsClicked = 0
+        hero_working = 0
+        hero_clicked = 0
+        empty_scrolls_attempts = config['scroll_attemps']
 
-    buttonsClicked = 0
-    global hero_clicks
-    hero_clicks = 0
-    global hero_working
-    hero_working = 0
-    hero_clicked = 0
-    empty_scrolls_attempts = config['scroll_attemps']
+        while(empty_scrolls_attempts >0):
+            hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
+            if mode == 'full':
+                buttonsClicked = clickFullBarButtons()
+            elif mode == 'green':
+                buttonsClicked = clickGreenBarButtons()
 
-    while(empty_scrolls_attempts >0):
-        hero_working += len(positions(images['working'], threshold=configThreshold['go_to_work_btn']))
-        if config['select_heroes_mode'] == 'full':
-            buttonsClicked = clickFullBarButtons()
-        elif config['select_heroes_mode'] == 'green':
-            buttonsClicked = clickGreenBarButtons()
+            hero_clicked += buttonsClicked
+
+            empty_scrolls_attempts -= 1
+
+            if empty_scrolls_attempts > 0:
+                scroll()
+            
+            time.sleep(2)
+        if hero_clicked > 0:
+            logger('💪 %d heroes sent to work (%d working now)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
         else:
-            buttonsClicked = clickWorkAll()
+            logger('💪 %d heroes are working' % hero_working, sendTelegram=True)
 
-        sendHeroesHome()
-
-        hero_clicked += buttonsClicked
-
-        empty_scrolls_attempts -= 1
-
-        if empty_scrolls_attempts > 0:
-            scroll()
-        
-        time.sleep(2)
-    if hero_clicked > 0:
-        logger('💪 %d heroes sent to work (%d working now)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
-    else:
-        logger('💪 %d heroes are working' % hero_working, sendTelegram=True)
     goToGame()
 
 def tryClickNewMap():
@@ -535,7 +519,7 @@ def sendScreenShotToTelegram():
 
 def sendStashScreenToTelegram():
     if clickBtn(images['stash']):
-        time.sleep(4)
+        time.sleep(3)
         q = datetime.datetime.now()
         d = q.strftime("%d%m%Y%H%M")
         image_file = os.path.join('targets', d +'.png')
@@ -543,9 +527,17 @@ def sendStashScreenToTelegram():
         telegram_bot_sendimage(image_file)
         os.remove(image_file)
         clickBtn(images['x'])
+
+def sendHeroesScreenToTelegram():
+    goToHeroes()
+    empty_scrolls_attempts = config['scroll_attemps']
+    while(empty_scrolls_attempts >0):
+        sendScreenShotToTelegram()
+        empty_scrolls_attempts -= 1
+        if empty_scrolls_attempts > 0:
+            scroll()
         time.sleep(1)
-        return True
-    return False
+    goToGame()
 
 
 #Telegram functions ---------------------------------------
@@ -556,11 +548,15 @@ bot_chatID = config['telegram']['chat_id']
 
 botThread: threading.Thread
 STARTED = range(1)
-reply_keyboard_commands = [['/start', '/workall', '/restall'], ['/stop', '/printscreen', '/printstash']]
+reply_keyboard_commands = [['/start', '/stop', '/restall'], ['/workall', '/workfull', '/workgreen'], ['/printscreen', '/printstash', '/printheroes']]
 
 def startTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        update.message.reply_text('Initialiting Bombcrypto Bot', reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
+        update.message.reply_text('Initialiting Bombcrypto Bot', reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard_commands,
+            resize_keyboard=True,
+            input_field_placeholder='Available commands'
+        ))
         global botThread
         botThread = threading.Thread(target=initBot)
         botThread.start()
@@ -574,43 +570,39 @@ def stopTelegram(update: Update, context: CallbackContext) -> int:
 
 def printscreenTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        q = datetime.datetime.now()
-        d = q.strftime("%d%m%Y%H%M")
-        image_file = os.path.join('targets', d +'.png')
-        pyautogui.screenshot(image_file)
-        update.message.reply_photo(photo=open(image_file, 'rb'), reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
-        os.remove(image_file)
+        sendScreenShotToTelegram()
         return STARTED
 
 def printstashTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        if clickBtn(images['stash']):
-            time.sleep(3)
-            q = datetime.datetime.now()
-            d = q.strftime("%d%m%Y%H%M")
-            image_file = os.path.join('targets', d +'.png')
-            pyautogui.screenshot(image_file)
-            update.message.reply_photo(photo=open(image_file, 'rb'), reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
-            os.remove(image_file)
-            clickBtn(images['x'])
+        sendStashScreenToTelegram()
+        return STARTED
+
+def printheroesTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        sendHeroesScreenToTelegram()
         return STARTED
 
 def workallTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        update.message.reply_text('Sending heroes to work...')
-        goToHeroes()
-        clickWorkAll()
-        goToGame()
-        update.message.reply_text('All heroes sent to work', reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
+        refreshHeroes('all')
+        return STARTED
+
+def workfullTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        refreshHeroes('full')
+        return STARTED
+
+def workgreenTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        refreshHeroes('green')
         return STARTED
 
 def restallTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
         update.message.reply_text('Sending heroes to rest...')
-        goToHeroes()
-        clickRestAll()
-        goToGame()
-        update.message.reply_text('All heroes sent to rest', reply_markup=ReplyKeyboardMarkup(reply_keyboard_commands))
+        sendRestAll()
+        update.message.reply_text('All heroes sent to rest')
         return STARTED
 
 def initTelegram() -> None:
@@ -625,7 +617,10 @@ def initTelegram() -> None:
                     CommandHandler('stop', stopTelegram),
                     CommandHandler('printscreen', printscreenTelegram),
                     CommandHandler('printstash', printstashTelegram),
+                    CommandHandler('printheroes', printheroesTelegram),
                     CommandHandler('workall', workallTelegram),
+                    CommandHandler('workfull', workfullTelegram),
+                    CommandHandler('workgreen', workgreenTelegram),
                     CommandHandler('restall', restallTelegram)
                 ]
             },

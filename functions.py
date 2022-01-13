@@ -44,6 +44,9 @@ def initConfig():
     global images
     images = load_images()
 
+    global sendNextLog
+    sendNextLog = True
+
 def initBot():
 
     last = {
@@ -247,8 +250,7 @@ def scroll():
 
 
 def clickWorkAll():
-    clickBtn(images['work-all'])
-    return 0
+    return clickBtn(images['work-all'])
 
 def sendRestAll():
     goToHeroes()
@@ -462,19 +464,21 @@ def sendHeroesHome():
 
 
 
-def refreshHeroes(mode):
+def refreshHeroes(mode: str, sendLog: bool = False):
     if mode == 'full':
-        logger('⚒️ Sending heroes with full stamina bar to work', sendTelegram=True)
+        logger('⚒️ Sending heroes with full stamina bar to work', sendTelegram=sendLog)
     elif mode == 'green':
-        logger('⚒️ Sending heroes with green stamina bar to work', sendTelegram=True)
+        logger('⚒️ Sending heroes with green stamina bar to work', sendTelegram=sendLog)
     else:
-        logger('⚒️ Sending all heroes to work', sendTelegram=True)
+        logger('⚒️ Sending all heroes to work', sendTelegram=sendLog)
 
     goToHeroes()
 
     if mode == 'all':
-        clickWorkAll()
-        logger('💪 All heroes sent to working', sendTelegram=True)
+        if clickWorkAll():
+            logger('💪 All heroes sent to working', sendTelegram=True)
+        else:
+            logger('Error sending all heroes to working', sendTelegram=True)
     else:
         buttonsClicked = 0
         hero_working = 0
@@ -496,10 +500,13 @@ def refreshHeroes(mode):
                 scroll()
             
             time.sleep(2)
+        global sendNextLog
         if hero_clicked > 0:
             logger('💪 %d heroes sent to work (%d working now)' % (hero_clicked, (hero_working + hero_clicked)), sendTelegram=True)
+            sendNextLog = True
         else:
-            logger('💪 %d heroes are working' % hero_working, sendTelegram=True)
+            logger('💪 %d heroes are working' % hero_working, sendTelegram=(sendNextLog or sendLog))
+            sendNextLog = hero_working > 0
 
     goToGame()
 
@@ -546,64 +553,60 @@ bot_enabled = config['telegram']['enabled']
 bot_token = config['telegram']['token_api']
 bot_chatID = config['telegram']['chat_id']
 
-botThread: threading.Thread
-STARTED = range(1)
+botThread: threading.Thread = None
 reply_keyboard_commands = [['/start', '/stop', '/restall'], ['/workall', '/workfull', '/workgreen'], ['/printscreen', '/printstash', '/printheroes']]
 
 def startTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        update.message.reply_text('Initialiting Bombcrypto Bot', reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard_commands,
-            resize_keyboard=True,
-            input_field_placeholder='Available commands'
-        ))
         global botThread
-        botThread = threading.Thread(target=initBot)
-        botThread.start()
-        return STARTED
+        if botThread is None or not getattr(botThread, "running", True):
+            update.message.reply_text('Initialiting Bombcrypto Bot', reply_markup=ReplyKeyboardMarkup(
+                reply_keyboard_commands,
+                resize_keyboard=True,
+                input_field_placeholder='Available commands'
+            ))
+            botThread = threading.Thread(target=initBot)
+            botThread.start()
+        else:
+            update.message.reply_text('Bombcrypto Bot already started')
 
 def stopTelegram(update: Update, context: CallbackContext) -> int:
-    if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        update.message.reply_text('Sending interrupting signal...')
-        botThread.running = False
-        return ConversationHandler.END
+    if bot_enabled != NULL and str(update.message.chat_id) == bot_chatID:
+        if botThread is not None and getattr(botThread, "running", True):
+            setattr(botThread, "running", False)
+            update.message.reply_text('Sending interrupting signal...')
+        else:
+            update.message.reply_text('Bombcrypto Bot is not running')
 
 def printscreenTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
         sendScreenShotToTelegram()
-        return STARTED
 
 def printstashTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
         sendStashScreenToTelegram()
-        return STARTED
 
 def printheroesTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
         sendHeroesScreenToTelegram()
-        return STARTED
 
 def workallTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        refreshHeroes('all')
-        return STARTED
+        refreshHeroes('all', True)
 
 def workfullTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        refreshHeroes('full')
-        return STARTED
+        refreshHeroes('full', True)
 
 def workgreenTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
-        refreshHeroes('green')
-        return STARTED
+        refreshHeroes('green', True)
 
 def restallTelegram(update: Update, context: CallbackContext) -> int:
     if bot_enabled and str(update.message.chat_id) == bot_chatID:
         update.message.reply_text('Sending heroes to rest...')
         sendRestAll()
         update.message.reply_text('All heroes sent to rest')
-        return STARTED
 
 def initTelegram() -> None:
     if bot_enabled:
@@ -611,20 +614,19 @@ def initTelegram() -> None:
         dispatcher = updater.dispatcher
 
         conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', startTelegram)],
-            states={
-                STARTED: [
-                    CommandHandler('stop', stopTelegram),
-                    CommandHandler('printscreen', printscreenTelegram),
-                    CommandHandler('printstash', printstashTelegram),
-                    CommandHandler('printheroes', printheroesTelegram),
-                    CommandHandler('workall', workallTelegram),
-                    CommandHandler('workfull', workfullTelegram),
-                    CommandHandler('workgreen', workgreenTelegram),
-                    CommandHandler('restall', restallTelegram)
-                ]
-            },
-            fallbacks=[CommandHandler('stop', stopTelegram)],
+            entry_points=[
+                CommandHandler('start', startTelegram),
+                CommandHandler('stop', stopTelegram),
+                CommandHandler('printscreen', printscreenTelegram),
+                CommandHandler('printstash', printstashTelegram),
+                CommandHandler('printheroes', printheroesTelegram),
+                CommandHandler('workall', workallTelegram),
+                CommandHandler('workfull', workfullTelegram),
+                CommandHandler('workgreen', workgreenTelegram),
+                CommandHandler('restall', restallTelegram),
+            ],
+            states={},
+            fallbacks=[]
         )
         dispatcher.add_handler(conv_handler)
 

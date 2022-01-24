@@ -571,7 +571,7 @@ def startTelegram(update: Update, context: CallbackContext) -> int:
             update.message.reply_text('Bombcrypto Bot already started')
 
 def stopTelegram(update: Update, context: CallbackContext) -> int:
-    if bot_enabled != NULL and str(update.message.chat_id) == bot_chatID:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
         if botThread is not None and getattr(botThread, "running", True):
             setattr(botThread, "running", False)
             update.message.reply_text('Sending interrupting signal...')
@@ -608,6 +608,15 @@ def restallTelegram(update: Update, context: CallbackContext) -> int:
         sendRestAll()
         update.message.reply_text('All heroes sent to rest')
 
+def refreshGameTelegram(update: Update, context: CallbackContext) -> int:
+    if bot_enabled and str(update.message.chat_id) == bot_chatID:
+        update.message.reply_text('Refreshing page...')
+        pyautogui.hotkey('ctrl','f5')
+        time.sleep(15)
+        update.message.reply_text('Trying to login')
+        tryLogin()
+
+
 def initTelegram() -> None:
     if bot_enabled:
         updater = Updater(bot_token)
@@ -624,6 +633,7 @@ def initTelegram() -> None:
                 CommandHandler('workfull', workfullTelegram),
                 CommandHandler('workgreen', workgreenTelegram),
                 CommandHandler('restall', restallTelegram),
+                CommandHandler('refresh', refreshGameTelegram),
             ],
             states={},
             fallbacks=[]
